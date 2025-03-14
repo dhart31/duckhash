@@ -6,9 +6,12 @@ Creates sequence sketch of sequences
 import heapq
 import mmh3
 import screed
+import duckdb
+import typing
+from duckdb.typing import *
 import numpy as np
 
-def reverse_complement(seq):
+def reverse_complement(seq:str) -> str:
     """
     Returns reverse complement string of DNA sequence
     """
@@ -17,14 +20,14 @@ def reverse_complement(seq):
 
 MAX_HASH = 2**64
 
-def hash_kmer(kmer):
+def hash_kmer(kmer:str) -> int:
     """
     Calculates a 64-bit unsigned hash for input kmer
     """
     hash_val = mmh3.hash64(kmer, 42, signed=False)[0]
     return hash_val
 
-def sketch_sequence(sequence, kmer_size=21, max_hashes=1000):
+def sketch_sequence(sequence:str, kmer_size:int = 21, max_hashes:int =10000) -> np.array:
     """
     Creates a representative sketch of sequence with hash array
     - keeps smallest hash values
@@ -54,5 +57,14 @@ def sketch_sequence(sequence, kmer_size=21, max_hashes=1000):
 
     return np.array(sorted(-h for h in hash_heap), dtype=np.uint64)
 
+con = duckdb.connect('sketch_results.db')
 for record in screed.open('rawdata/ecoliMG1655.fa.gz'):
-    print(sketch_sequence(record.sequence))
+    con.create_function(
+        "sketch_sequence",
+        sketch_sequence,
+        [str,int,int],
+        list[int])
+    con.execute("CREATE OR REPLACE TABLE hash_table (sequence VARCHAR, hash_value BIGINT)")
+    con.execute(f"INSERT INTO hash_table SELECT '{record.name}',UNNEST(sketch_sequence('{record.sequence}',21,10000))")
+con.commit()
+con.close()
