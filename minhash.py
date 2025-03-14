@@ -64,7 +64,20 @@ for record in screed.open('rawdata/ecoliMG1655.fa.gz'):
         sketch_sequence,
         [str,int,int],
         list[int])
-    con.execute("CREATE OR REPLACE TABLE hash_table (sequence VARCHAR, hash_value BIGINT)")
-    con.execute(f"INSERT INTO hash_table SELECT '{record.name}',UNNEST(sketch_sequence('{record.sequence}',21,10000))")
+    
+    sql_create = """
+    CREATE OR REPLACE TABLE hash_table (
+        sequence VARCHAR, 
+        hash_value BIGINT
+    )
+    """
+    sql_insert = f"""
+    INSERT INTO hash_table 
+    SELECT '{record.name}', 
+        UNNEST(sketch_sequence('{record.sequence}', 21, 10000))
+    """
+    con.execute(sql_create)
+    con.execute(sql_insert)
+    
 con.commit()
 con.close()
