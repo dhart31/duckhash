@@ -8,6 +8,7 @@ import mmh3
 import screed
 import duckdb
 import typing
+import argparse
 from duckdb.typing import *
 import numpy as np
 
@@ -27,7 +28,7 @@ def hash_kmer(kmer:str) -> int:
     hash_val = mmh3.hash64(kmer, 42, signed=False)[0]
     return hash_val
 
-def sketch_sequence(sequence:str, kmer_size:int = 21, max_hashes:int =10000) -> np.array:
+def make_hash_array(sequence:str, kmer_size:int = 21, max_hashes:int =10000) -> np.array:
     """
     Creates a representative sketch of sequence with hash array
     - keeps smallest hash values
@@ -57,27 +58,39 @@ def sketch_sequence(sequence:str, kmer_size:int = 21, max_hashes:int =10000) -> 
 
     return np.array(sorted(-h for h in hash_heap), dtype=np.uint64)
 
-con = duckdb.connect('sketch_results.db')
-for record in screed.open('rawdata/ecoliMG1655.fa.gz'):
-    con.create_function(
-        "sketch_sequence",
-        sketch_sequence,
-        [str,int,int],
-        list[int])
-    
-    sql_create = """
-    CREATE OR REPLACE TABLE hash_table (
-        sequence VARCHAR, 
-        hash_value BIGINT
-    )
-    """
-    sql_insert = f"""
-    INSERT INTO hash_table 
-    SELECT '{record.name}', 
-        UNNEST(sketch_sequence('{record.sequence}', 21, 10000))
-    """
-    con.execute(sql_create)
-    con.execute(sql_insert)
-    
-con.commit()
-con.close()
+def sketch_sequence(filename,db_name):
+    con = duckdb.connect(db_name)
+    for record in screed.open(filename):
+        con.create_function(
+            "make_hash_array",
+            make_hash_array,
+            [str,int,int],
+            list[int])
+        
+        sql_create = """
+        CREATE OR REPLACE TABLE hash_table (
+            sequence VARCHAR, 
+            hash_value BIGINT
+        )
+        """
+        sql_insert = f"""
+        INSERT INTO hash_table 
+        SELECT '{record.name}', 
+            UNNEST(make_hash_array('{record.sequence}', 21, 10000))
+        """
+        con.execute(sql_create)
+        con.execute(sql_insert)
+        
+    con.commit()
+    con.close()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sequence','-s', type=str, help="Full path to a fasta/fastq file.")
+    parser.add_argument('--database','-db', type=str, help="Name of output database")
+
+    args=parser.parse_args()
+
+    sketch_sequence(args.sequence,args.database)
+
+
