@@ -60,27 +60,29 @@ def make_hash_array(sequence:str, kmer_size:int = 21, max_hashes:int =10000) -> 
 
 def sketch_sequence(filename,db_name):
     con = duckdb.connect(db_name)
-    for record in screed.open(filename):
-        con.create_function(
-            "make_hash_array",
-            make_hash_array,
-            [str,int,int],
-            list[int])
-        
-        sql_create = """
-        CREATE OR REPLACE TABLE hash_table (
-            sequence VARCHAR, 
-            hash_value BIGINT
-        )
-        """
-        sql_insert = f"""
-        INSERT INTO hash_table 
-        SELECT '{record.name}', 
-            UNNEST(make_hash_array('{record.sequence}', 21, 10000))
-        """
-        con.execute(sql_create)
-        con.execute(sql_insert)
-        
+    con.create_function(
+        "make_hash_array",
+        make_hash_array,
+        [str,int,int],
+        list[HUGEINT])
+    
+    sql_create = """
+    CREATE OR REPLACE TABLE hash_table (
+        sequence VARCHAR, 
+        hash_value HUGEINT
+    )
+    """
+    with screed.open(filename) as seqfile:
+            for record in seqfile:
+                sql_insert = f"""
+                INSERT INTO hash_table 
+                SELECT 
+                    '{record.name}', 
+                    UNNEST(make_hash_array('{record.sequence}', 21, 1000))
+                """
+                con.execute(sql_create)
+                con.execute(sql_insert)
+            
     con.commit()
     con.close()
 
@@ -90,7 +92,6 @@ if __name__ == '__main__':
     parser.add_argument('--database','-db', type=str, help="Name of output database")
 
     args=parser.parse_args()
-
     sketch_sequence(args.sequence,args.database)
 
 
