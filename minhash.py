@@ -72,6 +72,7 @@ def sketch_sequence(filename,db_name):
         hash_value HUGEINT
     )
     """
+    con.execute(sql_create)
     with screed.open(filename) as seqfile:
             for record in seqfile:
                 sql_insert = f"""
@@ -80,7 +81,6 @@ def sketch_sequence(filename,db_name):
                     '{record.name}', 
                     UNNEST(make_hash_array('{record.sequence}', 21, 1000))
                 """
-                con.execute(sql_create)
                 con.execute(sql_insert)
             
     con.commit()
